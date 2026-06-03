@@ -1,0 +1,40 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+*.egg
+.venv/
+venv/
+
+# IDE
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Data/Output
+*.xlsx
+*.csv
+*.json
+!schemas/*.json
+output/
+results/
+figures/
+
+# Logs
+*.log
+*.jsonl
+
+# Runtime output
+bridge-runs/
+pipeline_runs/
+
+# Environment
+.env
+.env.local
