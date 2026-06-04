@@ -1,141 +1,175 @@
-# Domain Literature Experiment Extraction & Ontology Skill — 文献数据提取与知识图谱
+# Domain Literature Experiment Extraction & Ontology Skill — 文献数据挖掘与知识图谱
+
+> **执行模型**: LLM-native，通过 Claude Code 工具链（WebSearch + WebFetch + LLM 推理）自动执行
+> **完整文档**: 参见 [SKILL.md](SKILL.md) 和 [pipeline-execution.md](pipeline-execution.md)
 
 ## 概述
 
-系统地从科学文献中收集、提取和结构化实验数据，构建领域本体和知识图谱，覆盖**文献搜索 → 实验提取 → 数据标准化 → 溯源 → 科学解释 → 本体构建 → 文献综述**全流程。
+系统性地从科学文献中收集、提取和结构化实验数据，构建领域本体和知识图谱。覆盖 **文献搜索 → 实验提取 → 数据标准化 → 溯源 → 科学解释 → 本体构建 → 文献综述** 全流程。
 
-### 适用场景
-
-- 从研究论文中提取实验参数（材料配方、工艺条件、性能指标）
-- 构建领域知识图谱 / 本体（JSON / OWL / Turtle 格式）
-- 多篇文献的交叉对比和趋势分析
-- 研究空白识别和综述生成
-- 适用于 PVA/BOPET 光学膜、催化剂、电池材料、高分子改性、药物配方等领域
+每个模块可独立运行，也可组合为 Full Pipeline（Module 1→2→3→4→5→6→7）端到端执行。
 
 ---
 
-## 执行流程
+## 适用场景
+
+| 你想做什么 | 触发的模块 |
+|-----------|-----------|
+| 搜索/收集特定领域的文献 | Module 1 |
+| 从论文中提取实验参数（配比、温度、性能） | Module 2 |
+| 标准化单位和命名 | Module 3 |
+| 查看数据来源和置信度 | Module 4 |
+| 生成科学解释 | Module 5 |
+| 构建知识图谱/本体 | Module 6 |
+| 文献综述、趋势分析、研究空白 | Module 7 |
+| 上述全部 | Full Pipeline (1→2→3→4→5→6→7) |
+
+适用于 **PVA/BOPET 光学膜**（预置领域知识）、催化剂合成、电池材料、高分子改性、药物配方等领域。
+
+---
+
+## 模块架构
 
 ```
-用户输入 (PDF论文 / 搜索关键词 / 预提取数据)
+用户输入 (PDF / 搜索关键词 / 预提取数据)
     │
     ▼
-┌────────────────────────────────────────────────────────────────────────┐
-│                        Module 1: 文献获取                               │
-│  在线搜索 (Semantic Scholar/PubMed) ◄──► 本地 PDF 解析                  │
-│  去重 → 构建 source_manifest.json                                      │
-└───────────────────────────────────┬────────────────────────────────────┘
-                                    ▼
-┌────────────────────────────────────────────────────────────────────────┐
-│                        Module 2: 实验提取                               │
-│  表格解析 ◄──► 文本模式匹配 ◄──► 图表描述提取                            │
-│  每个数据点绑定 source_snippet + 初始置信度                              │
-└───────────────────────────────────┬────────────────────────────────────┘
-                                    ▼
-┌────────────────────────────────────────────────────────────────────────┐
-│                        Module 3: 数据标准化                             │
-│  单位转换 (mil→μm, psi→MPa) + 同义词映射 (glycerin→glycerol)           │
-│  输出 experiments_normalized.json + CSV + Excel                        │
-└───────────────────────────────────┬────────────────────────────────────┘
-                                    ▼
-┌────────────────────────────────────────────────────────────────────────┐
-│                        Module 4: 溯源与置信度                           │
-│  每个字段关联原文位置、页码、提取方法                                    │
-│  置信度评分: 1.0(直接引用表格) ~ 0.1(从图数字化)                        │
-└───────────────────────────────────┬────────────────────────────────────┘
-                                    ▼
-               ┌────────────────────┼────────────────────┐
-               ▼                    ▼                    ▼
-     ┌──────────────────┐ ┌────────────────┐ ┌────────────────────┐
-     │   Module 5       │ │   Module 6     │ │   Module 7         │
-     │   科学解释        │ │   本体构建      │ │   文献综述          │
-     │   解释每个参数的  │ │   提取 8 类实体 │ │   主题归纳、趋势    │
-     │   物理意义和趋势  │ │   (材料/工艺/   │ │   分析、研究空白    │
-     │                  │ │    性能等)      │ │   识别              │
-     └──────────────────┘ └────────────────┘ └────────────────────┘
-```
-
-### 可组合的 Pipeline 模式
-
-```
-full (7个模块全跑)        extract-only (只提取+标准化)
-1→2→3→4→5→6→7           1→2→3→4
-
-knowledge-build (已有数据)  explain (只做解释)
-6→7                       5
+┌───────────────────────────────────────────────────────────────────┐
+│  Module 1: 文献获取                                               │
+│  WebSearch 多源搜索 → 去重(DOI/标题/作者) → source_manifest.json  │
+│  或本地 PDF 解析 → 提取全文文本                                    │
+└──────────────────────────────┬────────────────────────────────────┘
+                               ▼
+┌───────────────────────────────────────────────────────────────────┐
+│  Module 2: 实验提取 (LLM 驱动)                                    │
+│  表格解析 + 正文模式匹配 + 图表描述 → experiments_raw.json          │
+│  每个数据点绑定 source_snippet + 初始置信度                        │
+└──────────────────────────────┬────────────────────────────────────┘
+                               ▼
+┌───────────────────────────────────────────────────────────────────┐
+│  Module 3: 数据标准化                                             │
+│  单位转换 (mil→μm, psi→MPa) + 同义词映射 (glycerin→glycerol)      │
+│  → experiments_normalized.json + CSV + Excel                      │
+└──────────────────────────────┬────────────────────────────────────┘
+                               ▼
+┌───────────────────────────────────────────────────────────────────┐
+│  Module 4: 溯源与置信度                                           │
+│  每个字段 → 来源文献/页码/原文片段/提取方法                         │
+│  置信度: 1.0(表格直接引用) ~ 0.1(从图数字化)                        │
+└──────────────────────────────┬────────────────────────────────────┘
+                               │
+              ┌────────────────┼────────────────┐
+              ▼                ▼                ▼
+     ┌──────────────┐ ┌──────────────┐ ┌──────────────┐
+     │  Module 5    │ │  Module 6    │ │  Module 7    │
+     │  科学解释     │ │  本体构建     │ │  文献综述     │
+     │  参数物理意义 │ │  8类实体关系  │ │  趋势+空白   │
+     └──────────────┘ └──────────────┘ └──────────────┘
 ```
 
 ---
 
 ## 使用方式
 
-### 环境准备
+在 Claude Code 中通过自然语言触发，Skill 自动识别意图并路由到对应模块：
 
-```bash
-pip install pandas numpy openpyxl jsonschema
-```
+### 单模块触发
 
-### 全流程 Pipeline
+| 用户说（任何语言） | 路由到 |
+|-------------------|--------|
+| "搜索文献/找论文/检索" | → Module 1 |
+| "提取数据/抽取实验/从论文中提取" | → Module 2 |
+| "标准化/归一化/统一单位" | → Module 3 |
+| "溯源/出处/置信度" | → Module 4 |
+| "解释/为什么/机理分析" | → Module 5 |
+| "本体/知识图谱/关系抽取" | → Module 6 |
+| "综述/总结/趋势/研究空白" | → Module 7 |
 
-```bash
-python scripts/run_pipeline.py \
-  --input-dir ./papers/ \
-  --output-dir ./literature_output/ \
-  --mode full \
-  --skill-path .claude/skills/domain-literature-experiment-extraction-ontology-skill \
-  --domain pva_bopet \
-  --search-keywords "PVA optical film, light transmittance, haze, tensile strength"
-```
+### Full Pipeline 触发
+
+| 用户说 | 执行 |
+|-------|------|
+| "帮我把PVA光学膜文献的实验数据全部提取出来" | Module 1→2→3→4→5→6→7 |
 
 ### Pipeline 模式
 
 | 模式 | 说明 | 执行模块 | 输入要求 |
 |------|------|:--------:|---------|
-| `full` | 完整端到端处理 | 1→2→3→4→5→6→7 | 关键词或论文文件 |
+| `full` | 完整端到端 | 1→2→3→4→5→6→7 | 关键词或论文文件 |
 | `extract-only` | 搜索+提取+标准化+溯源 | 1→2→3→4 | 同上 |
-| `knowledge-build` | 从已有数据构建本体+综述 | 6→7 | 已有 `experiments_normalized.json` |
-| `explain` | 为已有数据生成解释 | 5 | 已有 `experiments_normalized.json` |
-| `resume` | 从指定模块继续 | N→...→7 | 需要前 N-1 个模块的输出 |
+| `knowledge-build` | 构建本体+综述 | 6→7 | 已有 `experiments_normalized.json` |
+| `explain` | 生成科学解释 | 5 | 已有 `experiments_normalized.json` |
+| `resume` | 从指定模块继续 | N→...→7 | 需要前 N-1 模块的输出 |
 
-### 脚本命令速查
+---
 
-| 脚本 | 功能 | 关键参数 |
-|------|------|---------|
-| `run_pipeline.py` | 全流程编排 | `--input-dir`, `--output-dir`, `--mode`, `--domain`, `--search-keywords` |
-| `normalize_data.py` | 单位转换+名称标准化 | `--input`, `--output`, `--vocabulary`, `--unit-map`, `--synonym-map` |
-| `build_ontology.py` | 构建本体 | `--experiments`, `--output`, `--format` (json/owl/ttl/jsonld) |
-| `generate_explanations.py` | 生成科学解释 | `--experiments`, `--output`, `--language` (zh/en) |
-| `summarize_literature.py` | 文献综述 | `--experiments`, `--provenance`, `--output`, `--focus-areas` |
-| `export_data.py` | 导出 CSV/Excel | `--input`, `--export-csv`, `--export-xlsx` |
-| `validate_outputs.py` | Schema 校验 | `--data`, `--schema`, `--report-errors` |
+## 预置领域知识（PVA/BOPET 光学膜）
 
-### 输入格式
+本 Skill 预置了 PVA/BOPET 光学膜研究领域的完整词库：
 
-| 类别 | 格式 | 说明 |
-|------|------|------|
-| 研究论文 | `.pdf` | 全文 PDF 提取 |
-| 网页文章 | URL/HTML | 开放获取页面 |
-| 补充材料 | `.pdf`, `.xlsx`, `.csv`, `.docx` | 表格和图表 |
-| 专利 | `.pdf`, HTML | 实验例部分 |
-| 预提取数据 | `.json`, `.csv` | 已有结构化数据 |
-| 搜索关键词 | 字符串 | 会自动执行在线搜索 |
+| 类别 | 覆盖范围 |
+|------|---------|
+| **材料** | PVA (1799/1788/1792/0588), PET (光学级), TAC, COP, PMMA, PC |
+| **添加剂** | 增塑剂(甘油/EG/PEG/山梨醇), 交联剂(硼酸/戊二醛/柠檬酸), 纳米填料(CNC/CNF/MMT/GO/CNT/SiO₂/TiO₂/ZnO) |
+| **工艺** | 溶液浇铸、熔融挤出、单向/双向拉伸、涂布(棒/凹版/狭缝)、干燥(热风/红外)、退火 |
+| **性能** | 透光率(%), 雾度(%), 拉伸强度(MPa), 断裂伸长率(%), 杨氏模量(GPa), WVTR, OTR, Tg/Tm/Td(°C), 结晶度(%), 接触角(°) |
+| **仪器** | UV-Vis, haze meter, UTM, DSC, TGA, DMA, SEM, AFM, XRD, FTIR |
+| **单位转换** | 见 `assets/unit_conversions.json` |
 
-### 输出目录结构
+**适配其他领域**：替换 `assets/` 目录下的词库文件即可。
+
+---
+
+## 核心设计原则
+
+### 1. 溯源至上（Provenance First）
+
+每个提取的数据点携带：
+- 来源文献（`source_id`）
+- 页码/位置（`source_page`, `source_location`）
+- 原文片段（`source_snippet`）
+- 提取方法（`extraction_method`: table_parse / text_regex / llm_extraction）
+
+### 2. 置信度体系
+
+| 置信度 | 含义 |
+|:------:|------|
+| 1.0 | 表格中直接引用的数值 |
+| 0.8-0.9 | 正文明确写出的数值+单位 |
+| 0.6-0.7 | 需要推理才能提取 |
+| 0.4-0.5 | 有歧义，记录了多种可能值 |
+| 0.1-0.3 | 从图表数字化估算 |
+| 0.0 | 缺失 |
+
+### 3. 不编造（No Fabrication）
+
+- 缺失字段显式为 `null`
+- 不使用 0、空字符串、"N/A" 替代
+- 单位无法转换时保留原值并标记
+- 部分完成+质量标注 优于 完整输出+编造数据
+
+---
+
+## 输出目录结构
 
 ```
 <output_dir>/
 ├── pipeline_manifest.json
 ├── .pipeline_events.jsonl
 ├── 01_literature/
-│   └── source_manifest.json           # 文献元数据
+│   ├── source_manifest.json           # 所有文献元数据
+│   ├── dedup_report.json              # 去重报告
+│   └── full_text/                     # 提取的全文文本
 ├── 02_extracted/
-│   └── experiments_raw.json           # 原始提取数据
+│   ├── experiments_raw.json           # 原始提取数据
+│   └── extraction_log.json            # 提取统计
 ├── 03_normalized/
-│   ├── experiments_normalized.json    # 标准化后数据
+│   ├── experiments_normalized.json    # 标准化后数据（核心输出）
 │   ├── experiments.csv                # CSV 导出
-│   └── experiments.xlsx              # Excel 导出
+│   ├── experiments.xlsx               # Excel 导出
+│   └── normalization_log.json         # 转换日志
 ├── 04_provenance/
-│   ├── provenance.json                # 溯源表
+│   ├── provenance.json                # 完整溯源表
 │   └── confidence_distribution.json   # 置信度分布
 ├── 05_explanations/
 │   ├── explanations.md                # 科学解释报告
@@ -157,64 +191,43 @@ python scripts/run_pipeline.py \
 
 ### 案例 1：全流程文献数据提取
 
-> **用户提问**: "帮我把PVA光学膜文献的实验数据全部提取出来"
+> **用户**: "帮我把PVA光学膜文献的实验数据全部提取出来"
 >
-> **Skill 响应**:
-> 1. **Module 1** — 在线搜索 PVA 光学膜相关文献，自动去重，构建 source manifest
-> 2. **Module 2** — 逐篇解析论文中的表格和正文，提取实验条件（配比、温度、时间）和性能数据（透光率、雾度、拉伸强度）
-> 3. **Module 3** — 标准化单位（mil→μm, psi→MPa）、同义词映射（glycerin→glycerol）
-> 4. **Module 4** — 每个数据点绑定原文出处、页码、原文片段，计算置信度
-> 5. **Module 5** — 解释每个参数的含义和趋势
-> 6. **Module 6** — 构建材料-工艺-性能本体（8类实体、关系抽取）
-> 7. **Module 7** — 生成文献综述，包含趋势分析、研究空白识别
+> Module 1 搜索文献 → Module 2 逐篇提取实验条件/性能参数 → Module 3 标准化单位 → Module 4 绑定原文出处 → Module 5 解释物理意义 → Module 6 构建本体 → Module 7 生成综述和研究空白报告
 
 ### 案例 2：从本地 PDF 提取
 
-> **用户提问**: "我这里有十几篇 PVA 光学膜的 PDF 论文，帮我把实验数据都抽出来"
+> **用户**: "我这里有十几篇 PVA 光学膜的 PDF 论文，帮我把实验数据都抽出来"
 >
-> **Skill 响应**:
-> - 跳过 Module 1 在线搜索，直接扫描本地 PDF 文件夹
-> - 对每篇 PDF 提取文本内容（扫描版尝试 OCR）
-> - 解析表格中的数据行（材料配比、工艺参数、性能指标）
-> - 输出结构化 JSON + CSV + Excel
+> 跳过 Module 1 在线搜索 → 直接读取本地 PDF → 解析表格和正文中的实验参数 → 合并输出 `experiments_normalized.json` + CSV + Excel
 
 ### 案例 3：构建知识图谱
 
-> **用户提问**: "根据已提取的 PVA 光学膜实验数据，构建一个材料-工艺-性能三要素的知识图谱"
+> **用户**: "根据已提取的数据，构建一个材料-工艺-性能的知识图谱"
 >
-> **Skill 响应**:
-> - 执行 `build_ontology.py --format json,ttl,owl`
-> - 自动提取 8 类实体：Material、Additive、ProcessStep、Instrument、Condition、Measurement、Property、Result
-> - 识别关系：`hasAdditive`、`processedBy`、`hasProperty`、`conductedUnder`
-> - 输出 3 种格式：JSON（内部表示）、Turtle、OWL（标准本体语言）
+> 路由到 Module 6 → 识别 8 类实体（Material, Additive, ProcessStep, Instrument, Condition, Measurement, Property, Result）→ 抽取关系（hasAdditive, processedBy, hasProperty）→ 输出 JSON / OWL / Turtle
 
-### 案例 4：文献综述和研究空白
+### 案例 4：研究空白分析
 
-> **用户提问**: "从这些文献里看看哪些实验条件还没有人研究过"
+> **用户**: "从这些文献里看看哪些实验条件还没有人研究过"
 >
-> **Skill 响应**:
-> - 执行 Module 7，统计分析所有提取数据的参数覆盖范围
-> - 识别空白：如温度 60-120°C 已被覆盖，但 55°C 和 130°C 未有文献报道
-> - 输出研究空白报告，附带新颖度评分
+> 路由到 Module 7 → 统计已有参数覆盖范围（如温度 60-120°C 已覆盖，55°C 和 130°C 为空白）→ 输出研究空白报告
 
 ---
 
-## 核心设计原则
+## 详细文档索引
 
-1. **溯源至上** — 每个数据点携带来源文献、页码、原文片段，可追溯验证
-2. **置信度体系** — 0.0(无证据) ~ 1.0(直接引用表格)，从不编造数据
-3. **不编造** — 缺失字段明确为 `null`，从不推测或制造数据
-4. **部分成功 > 完整但错误** — 有质量标注的部分输出优于编造数据的完整输出
-
----
-
-## 细节参考
-
-| 场景 | 读取文件 |
-|------|---------|
-| 需要了解模块详细逻辑 | `references/module-N-*.md` |
-| 需要全流程编排细节 | `pipeline-execution.md` |
-| 需要 Schema 校验 | `schemas/*.json` |
-| 需要领域词库 | `assets/pva_bopet_vocabulary.json` |
-| 需要提取配置模板 | `templates/extraction_config_template.json` |
-| 需要查看脚本参数 | 执行 `python scripts/<script>.py --help` |
+| 文档 | 内容 |
+|------|------|
+| [SKILL.md](SKILL.md) | 主技能文件：意图路由、模块选择、领域配置、执行协议 |
+| [pipeline-execution.md](pipeline-execution.md) | 全流水线编排：步骤、错误恢复、数据传递、断点续跑 |
+| [references/module-1-literature-acquisition.md](references/module-1-literature-acquisition.md) | 搜索策略、去重规则、全文提取 |
+| [references/module-2-experiment-extraction.md](references/module-2-experiment-extraction.md) | 提取模式、表格解析、字段映射 |
+| [references/module-3-data-normalization.md](references/module-3-data-normalization.md) | 单位转换、同义词映射、命名规则 |
+| [references/module-4-evidence-traceability.md](references/module-4-evidence-traceability.md) | 溯源 schema、置信度评分规则 |
+| [references/module-5-explanation-generation.md](references/module-5-explanation-generation.md) | 科学解释模板、注意事项 |
+| [references/module-6-ontology-modeling.md](references/module-6-ontology-modeling.md) | 类层次结构、关系抽取、OWL/JSON-LD 导出 |
+| [references/module-7-literature-summary.md](references/module-7-literature-summary.md) | 趋势综合、空白分析、方向推荐 |
+| [schemas/](schemas/) | 各模块输出的 JSON Schema |
+| [assets/](assets/) | 领域词库、同义词映射、单位转换表 |
+| [templates/](templates/) | 提取配置模板 |
