@@ -174,7 +174,28 @@ OMC 的钩子系统会自动检测你的输入关键词并触发对应的 Skill�
 
 [OpenClaw](https://github.com/TheAppleTucker/open-claw) 是一个本地运行的 AI 助手，通过 **Agent Skill (SKILL.md)** 格式的技能文件扩展能力。OpenClaw 兼容所有遵循 Agent Skill 规范的技能，无需修改即可直接使用。
 
-### 方式 A：在 OpenClaw 聊天中粘贴 GitHub 链接（最简单）
+### 方式 A：OpenClaw 原生 CLI 安装
+
+前提：确保已安装 Node.js ≥ 22.x，并且已安装 OpenClaw。
+
+```bash
+# 安装单个 skill（需要先将此仓库发布到 ClawHub 注册表）
+openclaw skills install chem-auto-lab-skill
+openclaw skills install domain-literature-experiment-extraction-ontology-skill
+openclaw skills install literature-to-lab-bridge
+
+# 查看已安装的 skill
+openclaw skills list --eligible
+
+# 查看 skill 详情
+openclaw skills info chem-auto-lab-skill
+
+# 启用/禁用
+openclaw skills enable chem-auto-lab-skill
+openclaw skills disable chem-auto-lab-skill
+```
+
+### 方式 B：在 OpenClaw 聊天中粘贴 GitHub 链接（最简单）
 
 无需安装任何 CLI 工具。直接在 OpenClaw 的聊天框中 **粘贴本仓库的 GitHub 链接**，助手会自动完成安装和配置：
 
@@ -183,7 +204,7 @@ OMC 的钩子系统会自动检测你的输入关键词并触发对应的 Skill�
 → OpenClaw 自动识别并安装其中的 3 个 Skill
 ```
 
-### 方式 B：ClawHub CLI（官方包管理器）
+### 方式 C：ClawHub CLI 安装
 
 使用 `npx` 直接运行，无需全局安装：
 
@@ -192,51 +213,48 @@ OMC 的钩子系统会自动检测你的输入关键词并触发对应的 Skill�
 npx clawhub@latest install chem-auto-lab-skill
 npx clawhub@latest install domain-literature-experiment-extraction-ontology-skill
 npx clawhub@latest install literature-to-lab-bridge
+
+# 搜索可用的 skill
+npx clawhub search chem
+
+# 批量更新
+npx clawhub update --all
 ```
 
-### 方式 C：手动复制到 Skills 目录
+### 方式 D：手动复制到 Skills 目录
 
 OpenClaw 支持 **三个优先级的目录**，按查找顺序排列：
 
 | 优先级 | 路径 | 说明 |
 |--------|------|------|
 | 🥇 最高 | `<project>/skills/` | 项目级 skill（推荐，随项目共享） |
-| 🥈 中等 | `~/.openclaw/skills/` | 用户全局 skill（所有项目可用） |
+| 🥈 中等 | `~/.openclaw/workspace/skills/` | 用户全局 skill |
 | 🥉 最低 | 内置 skill | OpenClaw 自带的 skill |
-
-两种手动安装方式均可：
-
-```bash
-# 项目级安装（推荐，skill 随项目仓库共享）
-cd your-project/
-mkdir -p skills/
-cp -r /tmp/chem-skills/.claude/skills/* skills/
-
-# 全局安装（所有 OpenClaw 项目可见）
-mkdir -p ~/.openclaw/skills/
-cp -r /tmp/chem-skills/.claude/skills/* ~/.openclaw/skills/
-```
-
-完整安装流：
 
 ```bash
 # 1. Clone 仓库
 git clone https://github.com/kingdol666/chem-lab-skills.git /tmp/chem-skills
 
 # 2. 选择安装位置
-# 选项 A：项目级（推荐）
+# 选项 A：项目级（推荐，skill 随项目共享）
 mkdir -p your-project/skills/
 cp -r /tmp/chem-skills/.claude/skills/* your-project/skills/
 
 # 选项 B：全局
-mkdir -p ~/.openclaw/skills/
-cp -r /tmp/chem-skills/.claude/skills/* ~/.openclaw/skills/
+mkdir -p ~/.openclaw/workspace/skills/
+cp -r /tmp/chem-skills/.claude/skills/* ~/.openclaw/workspace/skills/
 
 # 3. 清理
 rm -rf /tmp/chem-skills
 ```
 
-### 方式 D：多 Agent 安装器
+**注意**：新版本 OpenClaw 可能需要配置目录白名单：
+
+```bash
+openclaw config set fs.allow-path "/root/.openclaw/workspace"
+```
+
+### 方式 E：多 Agent 安装器
 
 如果同时使用 OpenClaw、Cursor、Codex 等多个 AI 助手，可用统一安装器：
 
@@ -412,7 +430,7 @@ Chem-Skill 安装验证
 手动调试：
 - Claude Code: 直接在对话中输入关键词
 - oh-my-claudecode: /oh-my-claudecode:<skill-name>
-- OpenClaw: 在聊天中粘贴 skill 的 GitHub 链接，或放入 ~/.openclaw/skills/ 目录
+- OpenClaw: 在聊天中粘贴 skill 的 GitHub 链接，或用 `openclaw skills install <name>`
 - Hermes: hermes run <skill-name>
 ```
 
@@ -457,7 +475,7 @@ Chem-Skill 安装验证
 可能是框架的 Skill 发现路径问题：
 - Claude Code: 检查 `.claude/skills/` 目录结构是否正确
 - oh-my-claudecode: 运行 `/omc-setup` 重新初始化
-- OpenClaw: 检查 skill 是否在 `<project>/skills/` 或 `~/.openclaw/skills/` 下
+- OpenClaw: 检查 skill 是否在 `<project>/skills/` 或 `~/.openclaw/workspace/skills/` 下，或运行 `openclaw skills list --eligible`
 - Hermes: 运行 `hermes reload` 重新加载
 ```
 
@@ -475,9 +493,9 @@ rm -rf /tmp/chem-skills
 
 **OpenClaw:**
 ```bash
-rm -rf ~/.openclaw/skills/chem-auto-lab-skill ~/.openclaw/skills/domain-literature-experiment-extraction-ontology-skill ~/.openclaw/skills/literature-to-lab-bridge
+rm -rf ~/.openclaw/workspace/skills/chem-auto-lab-skill ~/.openclaw/workspace/skills/domain-literature-experiment-extraction-ontology-skill ~/.openclaw/workspace/skills/literature-to-lab-bridge
 git clone https://github.com/kingdol666/chem-lab-skills.git /tmp/chem-skills
-cp -r /tmp/chem-skills/.claude/skills/* ~/.openclaw/skills/
+cp -r /tmp/chem-skills/.claude/skills/* ~/.openclaw/workspace/skills/
 rm -rf /tmp/chem-skills
 ```
 
@@ -502,7 +520,7 @@ Python 脚本仅用于辅助场景（如批量文件转换），不是核心执�
 | Chem-Skill 仓库 | https://github.com/kingdol666/chem-lab-skills |
 | Claude Code 文档 | https://docs.anthropic.com/en/docs/claude-code |
 | oh-my-claudecode | https://github.com/superanos/oh-my-claudecode |
-| OpenClaw | https://github.com/TheAppleTucker/open-claw |
-| OpenClaw Skills 生态 | https://github.com/sjkncs/awesome-openclaw-skills |
-| ClawHub 包管理器 | 使用 `npx clawhub@latest` |
+| OpenClaw 官网 | https://openclaw.ai / https://github.com/TheAppleTucker/open-claw |
+| OpenClaw Skills 生态 (1715+ skills) | https://github.com/sjkncs/awesome-openclaw-skills |
+| ClawHub 注册中心 + CLI 工作流 | https://www.w3cschool.cn/openclawdocs/openclaw-tools-clawhub.html |
 | Hermes CLI | https://github.com/angrysky56/hermes-cli |
