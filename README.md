@@ -125,8 +125,21 @@ chem-skill/
 ### 环境要求
 
 - **Claude Code** — AI 编程助手
-- **oh-my-claudecode** — 多 Agent 编排框架（安装后 Skill 自动识别）
+- **oh-my-claudecode**（推荐）— 多 Agent 编排框架
 - 无需安装 Python 依赖（脚本为辅助工具，非核心执行路径）
+
+### 安装
+
+完整的安装步骤（支持 Claude Code、oh-my-claudecode、OpenClaw、Hermes）见 ➡️ **[INSTALL.md](INSTALL.md)**
+
+一键安装（Claude Code / oh-my-claudecode）：
+
+```bash
+# 在项目目录下执行
+git clone https://github.com/kingdol666/chem-lab-skills.git /tmp/chem-skills
+cp -r /tmp/chem-skills/.claude/skills/* .claude/skills/
+rm -rf /tmp/chem-skills
+```
 
 ### 使用方式
 
