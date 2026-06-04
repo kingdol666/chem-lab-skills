@@ -172,67 +172,92 @@ OMC 的钩子系统会自动检测你的输入关键词并触发对应的 Skill�
 
 ## 方式三：OpenClaw 安装
 
-[OpenClaw](https://github.com/TheAppleTucker/open-claw) 是 Claude Code 的社区技能管理工具，提供 `claw` CLI 来安装和管理技能。
+[OpenClaw](https://github.com/TheAppleTucker/open-claw) 是一个本地运行的 AI 助手，通过 **Agent Skill (SKILL.md)** 格式的技能文件扩展能力。OpenClaw 兼容所有遵循 Agent Skill 规范的技能，无需修改即可直接使用。
 
-### 前提
+### 方式 A：在 OpenClaw 聊天中粘贴 GitHub 链接（最简单）
 
-```bash
-# 确保安装了 claw CLI
-npm install -g open-claw
-# 或
-pip install open-claw
+无需安装任何 CLI 工具。直接在 OpenClaw 的聊天框中 **粘贴本仓库的 GitHub 链接**，助手会自动完成安装和配置：
+
+```
+用户: https://github.com/kingdol666/chem-lab-skills.git
+→ OpenClaw 自动识别并安装其中的 3 个 Skill
 ```
 
-验证安装：
+### 方式 B：ClawHub CLI（官方包管理器）
+
+使用 `npx` 直接运行，无需全局安装：
 
 ```bash
-claw --version
+# 安装单个 skill（需要先将此仓库发布到 ClawHub 注册表）
+npx clawhub@latest install chem-auto-lab-skill
+npx clawhub@latest install domain-literature-experiment-extraction-ontology-skill
+npx clawhub@latest install literature-to-lab-bridge
 ```
 
-### 方式 A：从 GitHub 安装（推荐）
+### 方式 C：手动复制到 Skills 目录
 
-如果该 skill 已发布到 OpenClaw 注册表：
+OpenClaw 支持 **三个优先级的目录**，按查找顺序排列：
+
+| 优先级 | 路径 | 说明 |
+|--------|------|------|
+| 🥇 最高 | `<project>/skills/` | 项目级 skill（推荐，随项目共享） |
+| 🥈 中等 | `~/.openclaw/skills/` | 用户全局 skill（所有项目可用） |
+| 🥉 最低 | 内置 skill | OpenClaw 自带的 skill |
+
+两种手动安装方式均可：
 
 ```bash
-claw install chem-auto-lab-skill
-claw install domain-literature-experiment-extraction-ontology-skill
-claw install literature-to-lab-bridge
+# 项目级安装（推荐，skill 随项目仓库共享）
+cd your-project/
+mkdir -p skills/
+cp -r /tmp/chem-skills/.claude/skills/* skills/
+
+# 全局安装（所有 OpenClaw 项目可见）
+mkdir -p ~/.openclaw/skills/
+cp -r /tmp/chem-skills/.claude/skills/* ~/.openclaw/skills/
 ```
 
-### 方式 B：从本地路径安装
+完整安装流：
 
 ```bash
-# 1. 先 clone 仓库
-git clone https://github.com/kingdol666/chem-lab-skills.git
+# 1. Clone 仓库
+git clone https://github.com/kingdol666/chem-lab-skills.git /tmp/chem-skills
 
-# 2. 使用 claw 的本地安装命令
-claw install --path ./chem-lab-skills/.claude/skills/chem-auto-lab-skill
-claw install --path ./chem-lab-skills/.claude/skills/domain-literature-experiment-extraction-ontology-skill
-claw install --path ./chem-lab-skills/.claude/skills/literature-to-lab-bridge
+# 2. 选择安装位置
+# 选项 A：项目级（推荐）
+mkdir -p your-project/skills/
+cp -r /tmp/chem-skills/.claude/skills/* your-project/skills/
 
-# 3. 安装后清理
-rm -rf ./chem-lab-skills
+# 选项 B：全局
+mkdir -p ~/.openclaw/skills/
+cp -r /tmp/chem-skills/.claude/skills/* ~/.openclaw/skills/
+
+# 3. 清理
+rm -rf /tmp/chem-skills
 ```
 
-### 方式 C：手动注册
+### 方式 D：多 Agent 安装器
 
-如果 `claw` 支持手动注册 Skill：
+如果同时使用 OpenClaw、Cursor、Codex 等多个 AI 助手，可用统一安装器：
 
 ```bash
-# 将 skill 复制到 claw 管理的 skill 目录
-mkdir -p ~/.claude/skills/
-cp -r /path/to/chem-lab-skills/.claude/skills/* ~/.claude/skills/
-claw refresh
+# 使用 @goodpostidea-tech/skills 交互式安装
+npx @goodpostidea-tech/skills add https://github.com/kingdol666/chem-lab-skills.git
+
+# 或使用 skills.sh 指定目标
+npx skills add kingdol666/chem-lab-skills -a openclaw
 ```
 
 ### 验证
 
-```bash
-claw list
-# 输出中应包含:
-# - chem-auto-lab-skill ✓
-# - domain-literature-experiment-extraction-ontology-skill ✓
-# - literature-to-lab-bridge ✓
+在 OpenClaw 中尝试以下对话：
+
+```
+用户: 帮我分析化学实验数据
+→ 自动匹配 chem-auto-lab-skill
+
+用户: 搜索PVA光学膜的文献，提取数据，推荐课题
+→ 自动匹配 literature-to-lab-bridge
 ```
 
 ---
@@ -387,7 +412,7 @@ Chem-Skill 安装验证
 手动调试：
 - Claude Code: 直接在对话中输入关键词
 - oh-my-claudecode: /oh-my-claudecode:<skill-name>
-- OpenClaw: claw run <skill-name>
+- OpenClaw: 在聊天中粘贴 skill 的 GitHub 链接，或放入 ~/.openclaw/skills/ 目录
 - Hermes: hermes run <skill-name>
 ```
 
@@ -430,25 +455,34 @@ Chem-Skill 安装验证
 
 ```
 可能是框架的 Skill 发现路径问题：
-- Claude Code: 检查 .claude/skills/ 目录结构是否正确
-- oh-my-claudecode: 运行 /omc-setup 重新初始化
-- OpenClaw: 运行 claw refresh 刷新注册表
-- Hermes: 运行 hermes reload 重新加载
+- Claude Code: 检查 `.claude/skills/` 目录结构是否正确
+- oh-my-claudecode: 运行 `/omc-setup` 重新初始化
+- OpenClaw: 检查 skill 是否在 `<project>/skills/` 或 `~/.openclaw/skills/` 下
+- Hermes: 运行 `hermes reload` 重新加载
 ```
 
 ### Q5：如何更新 Skill 到最新版本？
 
+根据你的框架选择对应路径：
+
+**Claude Code / oh-my-claudecode:**
 ```bash
-# 方法一：重新 clone
 rm -rf .claude/skills/chem-auto-lab-skill .claude/skills/domain-literature-experiment-extraction-ontology-skill .claude/skills/literature-to-lab-bridge
 git clone https://github.com/kingdol666/chem-lab-skills.git /tmp/chem-skills
 cp -r /tmp/chem-skills/.claude/skills/* .claude/skills/
 rm -rf /tmp/chem-skills
+```
 
-# 方法二：用 git subtree（如果已将此仓库添加到你的项目中）
-git subtree pull --squash --prefix=.claude/skills https://github.com/kingdol666/chem-lab-skills.git main
+**OpenClaw:**
+```bash
+rm -rf ~/.openclaw/skills/chem-auto-lab-skill ~/.openclaw/skills/domain-literature-experiment-extraction-ontology-skill ~/.openclaw/skills/literature-to-lab-bridge
+git clone https://github.com/kingdol666/chem-lab-skills.git /tmp/chem-skills
+cp -r /tmp/chem-skills/.claude/skills/* ~/.openclaw/skills/
+rm -rf /tmp/chem-skills
+```
 
-# 方法三：用 git submodule（如果已初始化为 submodule）
+**用 git submodule（如果你已将此仓库作为依赖加入项目）：**
+```bash
 git submodule update --remote .claude/skills
 ```
 
@@ -469,4 +503,6 @@ Python 脚本仅用于辅助场景（如批量文件转换），不是核心执�
 | Claude Code 文档 | https://docs.anthropic.com/en/docs/claude-code |
 | oh-my-claudecode | https://github.com/superanos/oh-my-claudecode |
 | OpenClaw | https://github.com/TheAppleTucker/open-claw |
+| OpenClaw Skills 生态 | https://github.com/sjkncs/awesome-openclaw-skills |
+| ClawHub 包管理器 | 使用 `npx clawhub@latest` |
 | Hermes CLI | https://github.com/angrysky56/hermes-cli |
